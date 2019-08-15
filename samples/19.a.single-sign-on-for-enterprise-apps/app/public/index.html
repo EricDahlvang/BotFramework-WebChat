@@ -118,7 +118,7 @@
               }
               document.getElementById('historySpinner').style.display = 'none';
               if(!historyComplete){
-                document.getElementById('moreHistory').style.display = '';
+                document.getElementById('moreHistory').style.display = 'flex';
               }
             } else if (
               action.type === 'DIRECT_LINE/INCOMING_ACTIVITY'
@@ -180,11 +180,13 @@
                 {
                   id: 'historySpinner',
                   style: { 
-                    color: 'Red',
+                    color: 'lightgrey',
                     height: 40,
                     display: 'none',
                     marginRight: 25,
-                    marginLeft: 25
+                    marginLeft: 25,
+                    justifyContent: 'center',
+                    alignItems: 'center'
                   }
                 },
                 'Retrieving history...'
@@ -256,7 +258,7 @@
       // This event is handled in WebChatHistoryMiddleware.cs
       function getHistory() {
         if(oauthAccessToken)
-         document.getElementById('historySpinner').style.display = '';
+         document.getElementById('historySpinner').style.display = 'flex';
          document.getElementById('moreHistory').style.display = 'none';
 
           dl.postActivity({
