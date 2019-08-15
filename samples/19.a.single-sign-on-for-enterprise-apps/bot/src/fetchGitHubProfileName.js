@@ -1,8 +1,8 @@
 const fetchJSON = require('./utils/fetchJSON');
 
-// Fetching the GitHub profile name by an access token
+// Fetching the GitHub profile name and id by an access token
 module.exports = async function fetchGitHubProfileName(accessToken) {
-  const { name } = await fetchJSON(
+  const { name, id } = await fetchJSON(
     'https://api.github.com/user',
     {
       headers: {
@@ -11,5 +11,5 @@ module.exports = async function fetchGitHubProfileName(accessToken) {
     }
   );
 
-  return name;
+  return { name, id };
 };

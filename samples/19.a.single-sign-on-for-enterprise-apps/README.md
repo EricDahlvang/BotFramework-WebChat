@@ -1,6 +1,12 @@
+# WebChat Conversation History
+
+## Sample origin
+
+This is a ported version of the [Single sign-on demo for enterprise apps using OAuth](https://github.com/microsoft/BotFramework-WebChat/tree/master/samples/19.a.single-sign-on-for-enterprise-apps).  The code has been modified to 
+
 # Single sign-on demo for enterprise apps using OAuth
 
-[![Deploy Status](https://fuselabs.vsrm.visualstudio.com/_apis/public/Release/badge/531382a8-71ae-46c8-99eb-9512ccb91a43/9/9)](https://webchat-sample-sso.azurewebsites.net/)
+[![Deploy Status](https://fuselabs.vsrm.visualstudio.com/_apis/public/Release/badge/531382a8-71ae-46c8-99eb-9512ccb91a43/9/9)](https://ssoconversationhistoryapi.azurewebsites.net//)
 
 # Description
 

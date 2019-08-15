@@ -19,42 +19,20 @@
       work correctly both with client-side routing and a non-root public URL.
       Learn how to configure a non-root public URL by running `npm run build`.
     -->
-    <title>Web Chat Single Sign-On Demo</title>
-    <script src="https://cdn.botframework.com/botframework-webchat/4.4.1/webchat.js"></script>
+    <title>Web Chat History Demo</title>
+    <link rel="stylesheet" type="text/css" href="%PUBLIC_URL%/index.css">
+
+    <script src="https://unpkg.com/react@16.5.0/umd/react.development.js"></script>
+    <script src="https://cdn.botframework.com/botframework-webchat/4.5.1/webchat.js"></script>
     <script src="https://unpkg.com/simple-update-in@2.0.2/dist/simple-update-in.production.min.js"></script>
-
-    <!-- This is for styling Web Chat for demonstration purposes -->
-    <style type="text/css">
-      html, body {
-        background-color: #F7F7F7;
-        height: 100%;
-      }
-
-      body {
-        background-image: url(/images/BotServices-Translucent.svg);
-        background-position: 100% 100%;
-        background-repeat: no-repeat;
-        background-size: auto 50%;
-        margin: 0;
-      }
-
-      #webchat {
-        border-radius: 4px;
-        box-shadow: 0 0 8px rgba(0, 0, 0, .08);
-        height: calc(100% - 20px);
-        left: 10px;
-        overflow: hidden;
-        position: fixed;
-        top: 10px;
-        width: 360px;
-      }
-    </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="webchat"></div>
     <script>
       // This is a helper function for fetching JSON resources.
+      // This sample uses fetch to retrieve the directline token
+      // (see generateDirectLineToken)
       async function fetchJSON(url, options = {}) {
         const res = await fetch(
           url,
@@ -74,12 +52,28 @@
         return await res.json();
       }
 
+      let connected;
+      let oauthAccessToken;
+      let oauthProvider;
+      // Start with the assumption we have not retrieved all history
+      let historyComplete = false;
+
       (async function main() {
-        const store = WebChat.createStore({}, ({ dispatch }) => {
+        const store = WebChat.createStore({
+          activities: [
+            {
+              from: { role: 'channel' },
+              timestamp: new Date(1980, 0, 1),
+              type: 'spinner'
+            },
+            {
+              from: { role: 'channel' },
+              timestamp: new Date(1980, 0, 1),
+              type: 'moreHistory'
+            }
+          ]
+        }, ({ dispatch }) => {
           // We are using a Redux middleware to intercept actions in Web Chat and dispatch additional actions.
-          let connected;
-          let oauthAccessToken;
-          let oauthProvider;
 
           // If we receive "accesstokenchange" from the page, that means we have recently signed in or out.
           // We should send the new token to the bot. If we send an empty string, the bot will know we are signed out.
@@ -114,6 +108,30 @@
               // We are disconnecting.
               // Set connected to false so we don't send the access token automatically until CONNECT_FULFILLED.
               connected = false;
+            } else if (action.type === 'DIRECT_LINE/INCOMING_ACTIVITY'
+              && action.payload.activity.type === 'event'
+              && action.payload.activity.name === 'historyPageComplete'
+            ) {
+              // Scroll down a little, so the user can scroll up to retrieve more history
+              if(scrollable.scrollTop === 0){
+                scrollable.scrollTop = 10;
+              }
+              document.getElementById('historySpinner').style.display = 'none';
+              if(!historyComplete){
+                document.getElementById('moreHistory').style.display = '';
+              }
+            } else if (
+              action.type === 'DIRECT_LINE/INCOMING_ACTIVITY'
+              && action.payload.activity.type === 'event'
+              && action.payload.activity.name === 'historyComplete'
+              && (!action.payload.activity.channelData.clientActivityID)
+            ) {
+              // The bot sent and Event Activity to notify there
+              // are no more messages. So, quit listening to the scroll...
+              historyComplete = true;
+              scrollable.removeEventListener('scroll', scrollEventListener);
+              document.getElementById('moreHistory').style.display = 'none';
+              document.getElementById('historySpinner').style.display = 'none';
             } else if (
               action.type === 'DIRECT_LINE/INCOMING_ACTIVITY'
               && action.payload.activity.type === 'event'
@@ -148,9 +166,49 @@
 
         // This is for obtaining Direct Line token from the bot.
         // In production system, we should avoid using Direct Line secret to connect to the bot.
-        const { token } = await fetchJSON('/api/directline/token');
+        const { data }  = await fetchJSON('/api/directline/token');
+        const token = data.token;
+        const id = data.id;
+
+        const dl = WebChat.createDirectLine({ token });
 
         WebChat.renderWebChat({
+          activityMiddleware: () => next => card => {
+            if (card.activity.type === 'spinner') {
+              return () => React.createElement(
+                'div',
+                {
+                  id: 'historySpinner',
+                  style: { 
+                    color: 'Red',
+                    height: 40,
+                    display: 'none',
+                    marginRight: 25,
+                    marginLeft: 25
+                  }
+                },
+                'Retrieving history...'
+              );
+            } else if (card.activity.type === 'moreHistory') {
+              return () => React.createElement(
+                'div',
+                {
+                  id: 'moreHistory',
+                  style: { 
+                    color: 'Red',
+                    height: 40,
+                    display: 'none',
+                    marginRight: 25,
+                    marginLeft: 25
+                  }
+                },
+                'Scroll up to retrieve more history...'
+              );
+            }            
+            else {
+              return next(card);
+            }
+          },
           cardActionMiddleware: () => next => async ({ cardAction, getSignInUrl }) => {
             // To sign in, the bot will send a card action with a custom URL.
             // We are using "about:blank" as the placeholder URL.
@@ -173,13 +231,50 @@
               return next({ cardAction, getSignInUrl });
             }
           },
-          directLine: WebChat.createDirectLine({ token }),
+          directLine: dl,
           store,
           styleOptions: {
             backgroundColor: 'rgba(255, 255, 255, .8)'
           }
         }, document.getElementById('webchat'));
-      })().catch(err => console.error(err));
+        
+        // Setup a listener on the Scrollable element, and retrieve
+        // the next page when scrolled to the top.
+        const scrollable = document.querySelector('[role="log"] > *');
+        scrollable.addEventListener('scroll', scrollEventListener);
+
+        function scrollEventListener(event) {
+            if (scrollable.scrollTop === 0 && !historyComplete) {
+                getHistory();
+            }
+        };
+
+      // Send an event to the bot requesting user's chat history.
+      // (If GetInitialHistory is false, the continuation token
+      //  stored in UserData will be used to retrieve the next
+      //  page of user conversation history.)
+      // This event is handled in WebChatHistoryMiddleware.cs
+      function getHistory() {
+        if(oauthAccessToken)
+         document.getElementById('historySpinner').style.display = '';
+         document.getElementById('moreHistory').style.display = 'none';
+
+          dl.postActivity({
+                  type: "event",
+                  value: id,
+                  from: { id: id },
+                  name: "GetUserHistory",
+                  channelData: { initialHistory: false, oauthAccessToken, oauthProvider },
+              }).subscribe(function (id) {
+                  console.log('"GetUserHistory event" sent');
+              });
+        };
+
+      })()
+      .catch(err => 
+        console.error(err)
+      );
+
     </script>
     <div id="root"></div>
     <!--
