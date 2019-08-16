@@ -1,8 +1,8 @@
 const fetchJSON = require('./utils/fetchJSON');
 
-// Fetching the Microsoft Graph user display name by an access token
+// Fetching the Microsoft Graph user display name and id by an access token
 module.exports = async function fetchProfileDisplayName(accessToken) {
-  const { displayName } = await fetchJSON(
+  const { displayName, id } = await fetchJSON(
     'https://graph.microsoft.com/v1.0/me',
     {
       headers: {
@@ -11,5 +11,5 @@ module.exports = async function fetchProfileDisplayName(accessToken) {
     }
   );
 
-  return displayName;
+  return { name: displayName, id } ;
 }

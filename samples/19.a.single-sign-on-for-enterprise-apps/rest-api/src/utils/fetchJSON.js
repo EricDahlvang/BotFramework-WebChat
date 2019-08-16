@@ -6,8 +6,10 @@ module.exports = async function fetchJSON(url, options) {
     ...options,
     headers: {
       ...options.headers,
-      accept: 'application/json'
-    }
+      accept: 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(options.body)
   });
 
   if (!res.ok) {

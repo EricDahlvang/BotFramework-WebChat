@@ -4,6 +4,7 @@ const { findBestMatch } = require('string-similarity');
 const createBotAdapter = require('./createBotAdapter');
 const fetchGitHubProfileName = require('./fetchGitHubProfileName');
 const fetchMicrosoftGraphProfileName = require('./fetchMicrosoftGraphProfileName');
+const createConversationHistory = require('./utils/createConversationHistory');
 
 const QUESTIONS = {
   bye1: 'bye',
@@ -27,6 +28,25 @@ const SUGGESTED_ACTIONS = {
   }
 };
 
+const SIGN_IN_MESSAGE = {
+  type: 'message',
+  attachments: [{
+    content: {
+      buttons: [{
+        title: 'Sign into Azure Active Directory',
+        type: 'openUrl',
+        value: 'about:blank#sign-into-aad'
+      }, {
+        title: 'Sign into GitHub',
+        type: 'openUrl',
+        value: 'about:blank#sign-into-github'
+      }],
+      text: 'Please sign in so I can help tracking your orders.'
+    },
+    contentType: 'application/vnd.microsoft.card.hero',
+  }]
+};
+
 // For simplicity, we are using "string-similarity" package to guess what the user asked.
 function guessQuestion(message) {
   const match = findBestMatch(message, Object.values(QUESTIONS));
@@ -36,7 +56,31 @@ function guessQuestion(message) {
   }
 }
 
-module.exports = () => {
+async function setUserIdAndSendHistory(context, profile, userState, authProvider){
+    // Store the id from the auth provider in channelData so it can be used
+    // in history logging and retrieval
+    context.activity.channelData = { ...context.activity.channelData, authUserId: profile.id };
+
+    const history = createConversationHistory();
+    
+    // Update history record's userId so retrieving future history will also retrieve
+    // messages communicated to the bot before being signed in
+    await history.updateUserId(context, userState, context.activity.from.id, profile.id);
+
+    // When the profile is fetched, send a welcome message and history based on
+    // auth provider id.
+    await context.sendActivity({
+      text: `Welcome back, ${profile.name} id: ${profile.id} (via ${authProvider}).`,
+      ...SUGGESTED_ACTIONS
+    });
+
+    await history.sendUserHistory(context, userState, true);
+}
+
+module.exports = (userStates) => {
+  this.userState = userStates.userState;
+  this.authUserState = userStates.authUserState;
+
   const bot = new ActivityHandler();
 
   // Handler for "event" activity
@@ -47,40 +91,19 @@ module.exports = () => {
     if (name === 'oauth/signin') {
       const { oauthAccessToken, oauthProvider } = channelData;
 
-      // For async operations that are outside of BotBuilder, we should use proactive messaging.
-      const reference = TurnContext.getConversationReference(context.activity);
-
       await context.sendActivity({ type: 'typing' });
 
       switch (oauthProvider) {
         case 'github':
-          // We are using .then() here to detach the background job.
-          fetchGitHubProfileName(oauthAccessToken).then(async name => {
-            // When the GitHub profile is fetched, send a welcome message.
-            const adapter = createBotAdapter();
-
-            await adapter.continueConversation(reference, async context => {
-              await context.sendActivity({
-                text: `Welcome back, ${ name } (via GitHub).`,
-                ...SUGGESTED_ACTIONS
-              });
-            });
+          await fetchGitHubProfileName(oauthAccessToken).then(async profile => {
+            await setUserIdAndSendHistory(context, profile, this.userState, 'GitHub');
           });
 
           break;
 
         case 'microsoft':
-          // We are using .then() here to detach the background job.
-          fetchMicrosoftGraphProfileName(oauthAccessToken).then(async name => {
-            // When the Microsoft Graph profile is fetched, send a welcome message.
-            const adapter = createBotAdapter();
-
-            await adapter.continueConversation(reference, async context => {
-              await context.sendActivity({
-                text: `Welcome back, ${ name } (via Azure AD).`,
-                ...SUGGESTED_ACTIONS
-              });
-            });
+          await fetchMicrosoftGraphProfileName(oauthAccessToken).then(async profile => {
+            await setUserIdAndSendHistory(context, profile, this.userState, 'Azure AD');
           });
 
           break;
@@ -88,6 +111,8 @@ module.exports = () => {
     } else if (name === 'oauth/signout') {
       // If we receive the event activity with no access token inside, this means the user is signing out from the website.
       await context.sendActivity('See you later!');
+    } else if(name === 'GetUserHistory'){
+      await createConversationHistory().sendUserHistory(context, this.userState, context.activity.channelData.initialHistory);
     }
 
     await next();
@@ -96,8 +121,6 @@ module.exports = () => {
   // Handler for "message" activity
   bot.onMessage(async (context, next) => {
     const { activity: { channelData: { oauthAccessToken } = {}, text } } = context;
-
-    console.log(context.activity.channelData);
 
     const match = guessQuestion(text);
 
@@ -118,7 +141,7 @@ module.exports = () => {
       const now = new Date();
 
       await context.sendActivity({
-        text: `The time is now ${ now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }. What can I do to help?`,
+        text: `The time is now ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. What can I do to help?`,
         ...SUGGESTED_ACTIONS
       });
     } else if (
@@ -134,33 +157,46 @@ module.exports = () => {
         });
       } else {
         // Send them a sign in card if they are not signed in.
-        await context.sendActivity({
-          type: 'message',
-          attachments: [{
-            content: {
-              buttons: [{
-                title: 'Sign into Azure Active Directory',
-                type: 'openUrl',
-                value: 'about:blank#sign-into-aad'
-              }, {
-                title: 'Sign into GitHub',
-                type: 'openUrl',
-                value: 'about:blank#sign-into-github'
-              }],
-              text: 'Please sign in so I can help tracking your orders.'
-            },
-            contentType: 'application/vnd.microsoft.card.hero',
-          }]
-        });
+        await context.sendActivity(SIGN_IN_MESSAGE);
       }
     } else {
-      // Unknown phrases.
-      await context.sendActivity({
-        text: 'Sorry, I don\'t know what you mean.',
-        ...SUGGESTED_ACTIONS
-      });
+
+      if (!isNaN(text)) {
+        if(!oauthAccessToken){
+          // Deep copy, so we can change the .text
+          let signInMessage = JSON.parse(JSON.stringify(SIGN_IN_MESSAGE));
+          signInMessage.attachments[0].content.text = 'Please sign in to keep a running total.';
+          await context.sendActivity(signInMessage);
+        }
+        else{
+          // If the user sent a number, add it to a running total.
+          const runningTotalProperty = this.authUserState.createProperty("RunningTotal");
+          let total = await runningTotalProperty.get(context, 0);
+          total += Number(text);
+          await runningTotalProperty.set(context, total);
+
+          await context.sendActivity({
+            text: 'Running total:' + total
+          });
+        }
+      } else {
+        // Unknown phrases.
+        await context.sendActivity({
+          text: 'Sorry, I don\'t know what you mean.',
+          ...SUGGESTED_ACTIONS
+        });
+      }
     }
 
+    await next();
+  });
+
+  bot.onDialog(async (context, next) => {
+    // Save any state changes. The load happened during the execution of the Dialog.
+    await this.userState.saveChanges(context, false);
+    await this.authUserState.saveChanges(context, false);
+
+    // By calling next() you ensure that the next BotHandler is run.
     await next();
   });
 

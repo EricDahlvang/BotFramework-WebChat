@@ -1,6 +1,52 @@
-# Single sign-on demo for enterprise apps using OAuth
+# WebChat Conversation History
 
-[![Deploy Status](https://fuselabs.vsrm.visualstudio.com/_apis/public/Release/badge/531382a8-71ae-46c8-99eb-9512ccb91a43/9/9)](https://webchat-sample-sso.azurewebsites.net/)
+Hosted example: [SSOConversationHistoryAPI](http://SSOConversationHistoryAPI.azurewebsites.net)
+
+## Sample origin
+
+This is a ported version of the [Single sign-on demo for enterprise apps using OAuth](https://github.com/microsoft/BotFramework-WebChat/tree/master/samples/19.a.single-sign-on-for-enterprise-apps).  The code has been modified to include the following:
+
+### CosmosDb storage for Conversation History and User State
+
+- CosmosDbTranscriptLogger: logs all incoming and outgoing activities
+
+- AuthUserState: custom UserState for storing user scoped data based on signed in user id
+
+- UserConversationHistory: retrieves paged transcripts of history for signed in users
+
+### Other changes to support Conversation History 
+- HistoryMiddleware: adds AuthUserId to incoming and outgoing activities, ensuring the id is logged with every message
+
+- Running total of numbers stored in AuthuserState for signed in users
+
+- Scroll to Top in WebChat triggers history retrieval
+
+### Support for Enhanced Direct Line Authentication 
+
+- generateDirectLineToken now embeds a generated id beginning with 'dl_'
+
+## Additional Setup
+
+In addition to the below setup and configuration, CosmosDb is required for Conversation History.  How to create a CosmosDb database and container is described here: [how-to-create-container](https://docs.microsoft.com/en-us/azure/cosmos-db/how-to-create-container)  Below are the additional settings that must be added to the bot project's .env:
+
+```json
+DB_SERVICE_ENDPOINT=https://YourCosmosDbService.documents.azure.com:443/
+AUTH_KEY=YourCosmosDbAuthKey
+
+BOT_STATE_DATABASE=botdbv4Example
+BOT_STATE_COLLECTION=BotStateCollectionbotExample
+
+ACTIVITY_LOGS_DATABASE=botdbv4Example
+ACTIVITY_LOGS_COLLECTION=ActivityLogsCollectionExample
+```
+
+
+# NOTE: the following describes the original sample setup and configuration
+Note: see [Conversation History Pull Request](https://github.com/EricDahlvang/BotFramework-WebChat/pull/1/files) for a diff of changes required to support Conversation History
+
+# [Single sign-on demo for enterprise apps using OAuth](https://github.com/microsoft/BotFramework-WebChat/tree/master/samples/19.a.single-sign-on-for-enterprise-apps)
+
+[![Deploy Status](https://fuselabs.vsrm.visualstudio.com/_apis/public/Release/badge/531382a8-71ae-46c8-99eb-9512ccb91a43/9/9)](https://ssoconversationhistoryapi.azurewebsites.net//)
 
 # Description
 

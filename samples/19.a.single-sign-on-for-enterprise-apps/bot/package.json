@@ -10,11 +10,16 @@
   "author": "William Wong <compulim@hotmail.com> (http://compulim.info/)",
   "license": "MIT",
   "dependencies": {
-    "botbuilder": "^4.4.0",
-    "botbuilder-dialogs": "^4.4.0",
+    "@azure/cosmos": "^3.1.0",
+    "botbuilder": "^4.5.3",
+    "botbuilder-azure": "^4.5.3",
+    "botbuilder-dialogs": "^4.5.3",
+    "documentdb": "^1.15.3",
     "dotenv": "^8.0.0",
+    "path": "^0.12.7",
     "restify": "^8.3.2",
-    "string-similarity": "^3.0.0"
+    "string-similarity": "^3.0.0",
+    "uniqid": "^5.0.3"
   },
   "devDependencies": {
     "node-dev": "^4.0.0"
